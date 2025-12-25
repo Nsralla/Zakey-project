@@ -1,0 +1,19 @@
+
+        LangChain Framework:
+        LangChain is a framework for developing applications powered by language models. It provides
+        tools and abstractions to make it easier to build LLM-powered applications.
+        
+        Core Components:
+        1. Prompts: Templates and management for LLM inputs
+        2. Models: Interface to various LLM providers
+        3. Chains: Combining multiple LLM calls in sequence
+        4. Agents: Dynamic decision-making based on observations
+        5. Memory: Maintaining state across interactions
+        6. Indexes: Document processing and retrieval
+        
+        Common Patterns:
+        - Question answering over documents
+        - Chatbots with memory
+        - API interactions
+        - Data analysis and summarization
+        

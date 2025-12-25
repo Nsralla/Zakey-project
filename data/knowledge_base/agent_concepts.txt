@@ -1,0 +1,25 @@
+
+        AI Agents and Autonomous Systems:
+        An AI agent is a system that perceives its environment, processes information, and takes
+        actions to achieve specific goals. Modern AI agents use large language models as their
+        reasoning engine.
+        
+        Agent Components:
+        - Perception: Understanding input and context
+        - Reasoning: Using LLMs to make decisions
+        - Action: Executing tasks using tools
+        - Memory: Retaining information across interactions
+        
+        Agent Types:
+        1. Reactive Agents: Respond to immediate stimuli
+        2. Deliberative Agents: Plan and reason about actions
+        3. Hybrid Agents: Combine reactive and deliberative approaches
+        4. Multi-Agent Systems: Multiple agents collaborating
+        
+        Tools for Agents:
+        - Search APIs (web, database)
+        - Code execution
+        - File operations
+        - API integrations
+        - Calculator and math operations
+        

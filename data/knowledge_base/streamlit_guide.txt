@@ -1,0 +1,27 @@
+
+        Streamlit for AI Applications:
+        Streamlit is a Python framework for building interactive web applications quickly.
+        It's particularly popular for data science and ML demos.
+        
+        Key Features:
+        - Pure Python (no HTML/CSS/JS required)
+        - Auto-refresh on code changes
+        - Built-in widgets (buttons, sliders, inputs)
+        - Session state management
+        - Caching for performance
+        - Easy deployment
+        
+        Common Components:
+        - st.title(), st.header() - Headings
+        - st.text_input() - User input
+        - st.button() - Buttons
+        - st.write() - Display anything
+        - st.chat_message() - Chat interfaces
+        - st.spinner() - Loading indicators
+        
+        Best Practices:
+        - Use st.cache_data for expensive operations
+        - Manage state with session_state
+        - Organize code with functions
+        - Add error handling
+        

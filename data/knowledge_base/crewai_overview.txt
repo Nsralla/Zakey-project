@@ -1,0 +1,19 @@
+
+        CrewAI Framework Overview:
+        CrewAI is a cutting-edge framework designed for orchestrating role-playing autonomous AI agents.
+        By enabling agents to assume specific roles, goals, and backstories, CrewAI facilitates 
+        collaborative intelligence where multiple agents work together to accomplish complex tasks.
+        
+        Key Features:
+        - Role-based agent design
+        - Autonomous task execution
+        - Multi-agent collaboration
+        - Flexible process flows (sequential, hierarchical)
+        - Integration with various LLM providers
+        
+        Use Cases:
+        - Research and analysis workflows
+        - Content creation pipelines
+        - Data processing automation
+        - Customer support systems
+        

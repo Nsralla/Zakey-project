@@ -1,0 +1,22 @@
+
+        Retrieval Augmented Generation (RAG):
+        RAG is a technique that enhances language model outputs by retrieving relevant information
+        from a knowledge base before generation. This approach reduces hallucination and grounds
+        responses in factual data.
+        
+        RAG Process:
+        1. Document Chunking: Break documents into manageable pieces
+        2. Embedding: Convert chunks to vector representations
+        3. Storage: Store embeddings in a vector database
+        4. Retrieval: Search for relevant chunks based on query
+        5. Generation: Provide retrieved context to LLM for response
+        
+        Benefits:
+        - Reduced hallucination
+        - Up-to-date information
+        - Domain-specific knowledge
+        - Explainable responses with citations
+        
+        Popular Vector Databases:
+        - ChromaDB, Pinecone, Weaviate, FAISS, Qdrant
+        

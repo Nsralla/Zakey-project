@@ -1,0 +1,27 @@
+
+        Vector Databases and Embeddings:
+        Vector databases store high-dimensional vectors (embeddings) and enable efficient
+        similarity search. They are essential for RAG systems and semantic search.
+        
+        How Embeddings Work:
+        - Text is converted to numerical vectors
+        - Similar meanings have similar vectors
+        - Vector distance measures semantic similarity
+        
+        Common Embedding Models:
+        - OpenAI text-embedding-ada-002
+        - Sentence Transformers (open source)
+        - Cohere embeddings
+        - Google Universal Sentence Encoder
+        
+        Vector Search:
+        - Cosine similarity
+        - Euclidean distance
+        - Dot product
+        
+        ChromaDB Features:
+        - Simple API
+        - Persistent storage
+        - Filtering and metadata
+        - Multiple distance functions
+        

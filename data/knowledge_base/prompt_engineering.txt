@@ -1,0 +1,24 @@
+
+        Prompt Engineering Best Practices:
+        Effective prompt engineering is crucial for getting good results from language models.
+        
+        Key Principles:
+        1. Be specific and clear in instructions
+        2. Provide context and examples
+        3. Use role-playing and personas
+        4. Break complex tasks into steps
+        5. Specify output format
+        6. Include constraints and requirements
+        
+        Prompt Patterns:
+        - Few-shot learning: Provide examples
+        - Chain-of-thought: Ask for step-by-step reasoning
+        - Role prompting: Assign an expert role
+        - Template-based: Use structured formats
+        
+        Common Mistakes:
+        - Vague or ambiguous instructions
+        - Insufficient context
+        - Conflicting requirements
+        - Not specifying output format
+        

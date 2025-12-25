@@ -1,0 +1,24 @@
+
+        Model Context Protocol (MCP):
+        MCP is a protocol for connecting AI applications with external data sources and tools.
+        It provides a standardized way for AI systems to interact with various services.
+        
+        Key Concepts:
+        - Server: Exposes tools and resources
+        - Client: Consumes tools from servers
+        - Transport: Communication layer (stdio, HTTP)
+        - Tools: Functions that agents can call
+        - Resources: Data that can be accessed
+        
+        Benefits:
+        - Standardized integration
+        - Reusable components
+        - Security and access control
+        - Easy scaling
+        
+        Use Cases:
+        - Connecting agents to databases
+        - API integrations
+        - File system access
+        - External service integration
+        
