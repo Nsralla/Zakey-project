@@ -16,4 +16,296 @@
         - Chatbots with memory
         - API interactions
         - Data analysis and summarization
-        
+
+LangChain overview
+
+
+
+LangChain is an open source framework with a pre-built agent architecture and integrations for any model or tool — so you can build agents that adapt as fast as the ecosystem evolves
+
+LangChain is the easiest way to start building agents and applications powered by  s. With under 10 lines of code, you can connect to OpenAI, Anthropic, Google, and more. LangChain provides a pre-built agent architecture and model integrations to help you get started quickly and seamlessly incorporate  s into your agents and applications.
+We recommend you use LangChain if you want to quickly build agents and autonomous applications. Use LangGraph, our low-level agent orchestration framework and runtime, when you have more advanced needs that require a combination of deterministic and agentic workflows, heavy customization, and carefully controlled latency.
+LangChain agents are built on top of LangGraph in order to provide durable execution, streaming, human-in-the-loop, persistence, and more. You do not need to know LangGraph for basic LangChain agent usage.
+​
+Create an agent
+# pip install -qU langchain "langchain[anthropic]"
+from langchain.agents import create_agent
+
+def get_weather(city: str) -> str:
+    """Get weather for a given city."""
+    return f"It's always sunny in {city}!"
+
+agent = create_agent(
+    model="claude-sonnet-4-5-20250929",
+    tools=[get_weather],
+    system_prompt="You are a helpful assistant",
+)
+
+# Run the agent
+agent.invoke(
+    {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
+)
+
+
+Install LangChain
+
+To install the LangChain package:
+
+pip
+
+uv
+pip install -U langchain
+# Requires Python 3.10+
+LangChain provides integrations to hundreds of LLMs and thousands of other integrations. These live in independent provider packages.
+pip
+uv
+# Installing the OpenAI integration
+pip install -U langchain-openai
+
+# Installing the Anthropic integration
+pip install -U langchain-anthropic
+
+Quickstart
+
+
+
+This quickstart takes you from a simple setup to a fully functional AI agent in just a few minutes.
+LangChain Docs MCP server
+If you’re using an AI coding assistant or IDE (e.g. Claude Code or Cursor), you should install the LangChain Docs MCP server to get the most out of it. This ensures your agent has access to up-to-date LangChain documentation and examples.
+​
+Requirements
+For these examples, you will need to:
+Install the LangChain package
+Set up a Claude (Anthropic) account and get an API key
+Set the ANTHROPIC_API_KEY environment variable in your terminal
+Although these examples use Claude, you can use any supported model by changing the model name in the code and setting up the appropriate API key.
+​
+Build a basic agent
+Start by creating a simple agent that can answer questions and call tools. The agent will use Claude Sonnet 4.5 as its language model, a basic weather function as a tool, and a simple prompt to guide its behavior.
+from langchain.agents import create_agent
+
+def get_weather(city: str) -> str:
+    """Get weather for a given city."""
+    return f"It's always sunny in {city}!"
+
+agent = create_agent(
+    model="claude-sonnet-4-5-20250929",
+    tools=[get_weather],
+    system_prompt="You are a helpful assistant",
+)
+
+# Run the agent
+agent.invoke(
+    {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
+)
+To learn how to trace your agent with LangSmith, see the LangSmith documentation.
+​
+Build a real-world agent
+Next, build a practical weather forecasting agent that demonstrates key production concepts:
+Detailed system prompts for better agent behavior
+Create tools that integrate with external data
+Model configuration for consistent responses
+Structured output for predictable results
+Conversational memory for chat-like interactions
+Create and run the agent create a fully functional agent
+Let’s walk through each step:
+1
+Define the system prompt
+
+The system prompt defines your agent’s role and behavior. Keep it specific and actionable:
+SYSTEM_PROMPT = """You are an expert weather forecaster, who speaks in puns.
+
+You have access to two tools:
+
+- get_weather_for_location: use this to get the weather for a specific location
+- get_user_location: use this to get the user's location
+
+If a user asks you for the weather, make sure you know the location. If you can tell from the question that they mean wherever they are, use the get_user_location tool to find their location."""
+2
+Create tools
+
+Tools let a model interact with external systems by calling functions you define. Tools can depend on runtime context and also interact with agent memory.
+Notice below how the get_user_location tool uses runtime context:
+from dataclasses import dataclass
+from langchain.tools import tool, ToolRuntime
+
+@tool
+def get_weather_for_location(city: str) -> str:
+    """Get weather for a given city."""
+    return f"It's always sunny in {city}!"
+
+@dataclass
+class Context:
+    """Custom runtime context schema."""
+    user_id: str
+
+@tool
+def get_user_location(runtime: ToolRuntime[Context]) -> str:
+    """Retrieve user information based on user ID."""
+    user_id = runtime.context.user_id
+    return "Florida" if user_id == "1" else "SF"
+Tools should be well-documented: their name, description, and argument names become part of the model’s prompt. LangChain’s @tool decorator adds metadata and enables runtime injection via the ToolRuntime parameter.
+3
+Configure your model
+
+Set up your language model with the right parameters for your use case:
+from langchain.chat_models import init_chat_model
+
+model = init_chat_model(
+    "claude-sonnet-4-5-20250929",
+    temperature=0.5,
+    timeout=10,
+    max_tokens=1000
+)
+Depending on the model and provider chosen, initialization parameters may vary; refer to their reference pages for details.
+4
+Define response format
+
+Optionally, define a structured response format if you need the agent responses to match a specific schema.
+from dataclasses import dataclass
+
+# We use a dataclass here, but Pydantic models are also supported.
+@dataclass
+class ResponseFormat:
+    """Response schema for the agent."""
+    # A punny response (always required)
+    punny_response: str
+    # Any interesting information about the weather if available
+    weather_conditions: str | None = None
+5
+Add memory
+
+Add memory to your agent to maintain state across interactions. This allows the agent to remember previous conversations and context.
+from langgraph.checkpoint.memory import InMemorySaver
+
+checkpointer = InMemorySaver()
+In production, use a persistent checkpointer that saves to a database. See Add and manage memory for more details.
+6
+Create and run the agent
+
+Now assemble your agent with all the components and run it!
+from langchain.agents.structured_output import ToolStrategy
+
+agent = create_agent(
+    model=model,
+    system_prompt=SYSTEM_PROMPT,
+    tools=[get_user_location, get_weather_for_location],
+    context_schema=Context,
+    response_format=ToolStrategy(ResponseFormat),
+    checkpointer=checkpointer
+)
+
+# `thread_id` is a unique identifier for a given conversation.
+config = {"configurable": {"thread_id": "1"}}
+
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "what is the weather outside?"}]},
+    config=config,
+    context=Context(user_id="1")
+)
+
+print(response['structured_response'])
+# ResponseFormat(
+#     punny_response="Florida is still having a 'sun-derful' day! The sunshine is playing 'ray-dio' hits all day long! I'd say it's the perfect weather for some 'solar-bration'! If you were hoping for rain, I'm afraid that idea is all 'washed up' - the forecast remains 'clear-ly' brilliant!",
+#     weather_conditions="It's always sunny in Florida!"
+# )
+
+
+# Note that we can continue the conversation using the same `thread_id`.
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "thank you!"}]},
+    config=config,
+    context=Context(user_id="1")
+)
+
+print(response['structured_response'])
+# ResponseFormat(
+#     punny_response="You're 'thund-erfully' welcome! It's always a 'breeze' to help you stay 'current' with the weather. I'm just 'cloud'-ing around waiting to 'shower' you with more forecasts whenever you need them. Have a 'sun-sational' day in the Florida sunshine!",
+#     weather_conditions=None
+# )
+
+
+Philosophy
+
+
+
+LangChain exists to be the easiest place to start building with LLMs, while also being flexible and production-ready.
+
+LangChain is driven by a few core beliefs:
+Large Language Models (LLMs) are great, powerful new technology.
+LLMs are even better when you combine them with external sources of data.
+LLMs will transform what the applications of the future look like. Specifically, the applications of the future will look more and more agentic.
+It is still very early on in that transformation.
+While it’s easy to build a prototype of those agentic applications, it’s still really hard to build agents that are reliable enough to put into production.
+With LangChain, we have two core focuses:
+1
+We want to enable developers to build with the best models.
+
+Different providers expose different APIs, with different model parameters and different message formats. Standardizing these model inputs and outputs is a core focus, making it easy for developer to easily change to the most recent state-of-the-art model, avoiding lock-in.
+2
+We want to make it easy to use models to orchestrate more complex flows that interact with other data and computation.
+
+Models should be used for more than just text generation - they should also be used to orchestrate more complex flows that interact with other data. LangChain makes it easy to define tools that LLMs can use dynamically, as well as help with parsing of and access to unstructured data.
+​
+History
+Given the constant rate of change in the field, LangChain has also evolved over time. Below is a brief timeline of how LangChain has changed over the years, evolving alongside what it means to build with LLMs:
+​
+2022-10-24
+v0.0.1
+A month before ChatGPT, LangChain was launched as a Python package. It consisted of two main components:
+LLM abstractions
+“Chains”, or predetermined steps of computation to run, for common use cases. For example - RAG: run a retrieval step, then run a generation step.
+The name LangChain comes from “Language” (like Language models) and “Chains”.
+​
+2022-12
+The first general purpose agents were added to LangChain.
+These general purpose agents were based on the ReAct paper (ReAct standing for Reasoning and Acting). They used LLMs to generate JSON that represented tool calls, and then parsed that JSON to determine what tools to call.
+​
+2023-01
+OpenAI releases a ‘Chat Completion’ API.
+Previously, models took in strings and returned a string. In the ChatCompletions API, they evolved to take in a list of messages and return a message. Other model providers followed suit, and LangChain updated to work with lists of messages.
+​
+2023-01
+LangChain releases a JavaScript version.
+LLMs and agents will change how applications are built and JavaScript is the language of application developers.
+​
+2023-02
+LangChain Inc. was formed as a company around the open source LangChain project.
+The main goal was to “make intelligent agents ubiquitous”. The team recognized that while LangChain was a key part (LangChain made it simple to get started with LLMs), there was also a need for other components.
+​
+2023-03
+OpenAI releases ‘function calling’ in their API.
+This allowed the API to explicitly generate payloads that represented tool calls. Other model providers followed suit, and LangChain was updated to use this as the preferred method for tool calling (rather than parsing JSON).
+​
+2023-06
+LangSmith is released as closed source platform by LangChain Inc., providing observability and evals
+The main issue with building agents is getting them to be reliable, and LangSmith, which provides observability and evals, was built to solve that need. LangChain was updated to integrate seamlessly with LangSmith.
+​
+2024-01
+v0.1.0
+LangChain releases 0.1.0, its first non-0.0.x.
+The industry matured from prototypes to production, and as such, LangChain increased its focus on stability.
+​
+2024-02
+LangGraph is released as an open-source library.
+The original LangChain had two focuses: LLM abstractions, and high-level interfaces for getting started with common applications; however, it was missing a low-level orchestration layer that allowed developers to control the exact flow of their agent. Enter: LangGraph.
+When building LangGraph, we learned from lessons when building LangChain and added functionality we discovered was needed: streaming, durable execution, short-term memory, human-in-the-loop, and more.
+​
+2024-06
+LangChain has over 700 integrations.
+Integrations were split out of the core LangChain package, and either moved into their own standalone packages (for the core integrations) or langchain-community.
+​
+2024-10
+LangGraph becomes the preferred way to build any AI application that is more than a single LLM call.
+As developers tried to improve the reliability of their applications, they needed more control than the high-level interfaces provided. LangGraph provided that low-level flexibility. Most chains and agents were marked as deprecated in LangChain with guides on how to migrate them to LangGraph. There is still one high-level abstraction created in LangGraph: an agent abstraction. It is built on top of low-level LangGraph and has the same interface as the ReAct agents from LangChain.
+​
+2025-04
+Model APIs become more multimodal.
+Models started to accept files, images, videos, and more. We updated the langchain-core message format accordingly to allow developers to specify these multimodal inputs in a standard way.
+​
+2025-10-20
+v1.0.0
+LangChain releases 1.0 with two major changes:
+Complete revamp of all chains and agents in langchain. All chains and agents are now replaced with only one high level abstraction: an agent abstraction built on top of LangGraph. This was the high-level abstraction that was originally created in LangGraph, but just moved to LangChain.
+For users still using old LangChain chains/agents who do NOT want to upgrade (note: we recommend you do), you can continue using old LangChain by installing the langchain-classic package.
+A standard message content format: Model APIs evolved from returning messages with a simple content string to more complex output types - reasoning blocks, citations, server-side tool calls, etc. LangChain evolved its message formats to standardize these across providers.

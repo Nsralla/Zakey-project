@@ -124,28 +124,172 @@ def init_tools():
     return tools
 
 
-def run_research_agents(topic: str, mode: str = "full"):
-    """Run the AI agent crew on a topic"""
+def run_research_agents(topic: str, mode: str = "full", stream_container=None):
+    """
+    Run the AI agent crew on a topic with optional streaming support.
+    
+    Args:
+        topic: The research topic
+        mode: 'full' for all 3 agents, 'quick' for just research agent
+        stream_container: Streamlit container to stream output to (if provided)
+    
+    Returns:
+        Final result text
+    """
     try:
+        # Enable streaming if container is provided
+        enable_streaming = stream_container is not None
+        
         if mode == "full":
             # Full research with all 3 agents
-            crew = create_research_crew(topic)
-            result = crew.kickoff()
+            crew = create_research_crew(topic, enable_streaming=enable_streaming)
+            
+            if enable_streaming and hasattr(crew, '_streaming_handler'):
+                # Run in a separate thread and stream tokens
+                result_container = {'result': None, 'error': None}
+                
+                def run_crew():
+                    try:
+                        raw_result = crew.kickoff()
+                        # Extract actual content immediately to avoid AgentFinish issues
+                        if hasattr(raw_result, 'return_values'):
+                            # AgentFinish object
+                            return_vals = raw_result.return_values
+                            if isinstance(return_vals, dict):
+                                result_container['result'] = return_vals.get('output', str(return_vals))
+                            else:
+                                result_container['result'] = str(return_vals)
+                        elif hasattr(raw_result, 'raw'):
+                            result_container['result'] = raw_result.raw
+                        elif hasattr(raw_result, 'output'):
+                            result_container['result'] = raw_result.output
+                        else:
+                            result_container['result'] = raw_result
+                    except ValueError as e:
+                        # Handle AgentFinish error from CrewAI when streaming
+                        if "Unexpected output type from agent" in str(e) and "AgentFinish" in str(e):
+                            # Extract result from streaming handler's collected tokens
+                            if crew._streaming_handler and crew._streaming_handler.tokens:
+                                result_container['result'] = crew._streaming_handler.get_tokens()
+                            else:
+                                result_container['result'] = "Agent completed but result extraction failed."
+                        else:
+                            result_container['error'] = e
+                    except Exception as e:
+                        result_container['error'] = e
+                
+                # Start crew execution in background thread
+                import threading
+                crew_thread = threading.Thread(target=run_crew)
+                crew_thread.start()
+                
+                # Stream tokens as they arrive
+                full_text = ""
+                while crew_thread.is_alive() or not crew._streaming_handler.token_queue.empty():
+                    try:
+                        token = crew._streaming_handler.token_queue.get(timeout=0.1)
+                        if token is None:  # End of stream
+                            crew._streaming_handler.token_queue.task_done()
+                            continue
+                        full_text += token
+                        stream_container.markdown(full_text)
+                        crew._streaming_handler.token_queue.task_done()
+                    except:
+                        pass
+                
+                crew_thread.join()
+                
+                if result_container['error']:
+                    raise result_container['error']
+                    
+                result = result_container['result']
+            else:
+                result = crew.kickoff()
+                
         elif mode == "quick":
             # Quick research with just research agent
-            team = AgentTeam()
+            team = AgentTeam(enable_streaming=enable_streaming)
             task = team.create_task(
                 agent_id='research_agent',
                 description=f"Quickly research: {topic}. Provide key information.",
                 expected_output="Concise research findings"
             )
             crew = team.create_crew(tasks=[task], process="sequential", verbose=1)
-            result = crew.kickoff()
+            
+            if enable_streaming and team.streaming_handler:
+                # Run in a separate thread and stream tokens
+                result_container = {'result': None, 'error': None}
+                
+                def run_crew():
+                    try:
+                        raw_result = crew.kickoff()
+                        # Extract actual content immediately to avoid AgentFinish issues
+                        if hasattr(raw_result, 'return_values'):
+                            # AgentFinish object
+                            return_vals = raw_result.return_values
+                            if isinstance(return_vals, dict):
+                                result_container['result'] = return_vals.get('output', str(return_vals))
+                            else:
+                                result_container['result'] = str(return_vals)
+                        elif hasattr(raw_result, 'raw'):
+                            result_container['result'] = raw_result.raw
+                        elif hasattr(raw_result, 'output'):
+                            result_container['result'] = raw_result.output
+                        else:
+                            result_container['result'] = raw_result
+                    except ValueError as e:
+                        # Handle AgentFinish error from CrewAI when streaming
+                        if "Unexpected output type from agent" in str(e) and "AgentFinish" in str(e):
+                            # Extract result from streaming handler's collected tokens
+                            if team.streaming_handler and team.streaming_handler.tokens:
+                                result_container['result'] = team.streaming_handler.get_tokens()
+                            else:
+                                result_container['result'] = "Agent completed but result extraction failed."
+                        else:
+                            result_container['error'] = e
+                    except Exception as e:
+                        result_container['error'] = e
+                
+                import threading
+                crew_thread = threading.Thread(target=run_crew)
+                crew_thread.start()
+                
+                # Stream tokens as they arrive
+                full_text = ""
+                while crew_thread.is_alive() or not team.streaming_handler.token_queue.empty():
+                    try:
+                        token = team.streaming_handler.token_queue.get(timeout=0.1)
+                        if token is None:
+                            team.streaming_handler.token_queue.task_done()
+                            continue
+                        full_text += token
+                        stream_container.markdown(full_text)
+                        team.streaming_handler.token_queue.task_done()
+                    except:
+                        pass
+                
+                crew_thread.join()
+                
+                if result_container['error']:
+                    raise result_container['error']
+                    
+                result = result_container['result']
+            else:
+                result = crew.kickoff()
         else:
             result = "Invalid mode"
         
-        # Extract actual content from CrewOutput object
-        if hasattr(result, 'raw'):
+        # Extract actual content from CrewOutput object or AgentFinish
+        # Handle AgentFinish objects (common with streaming)
+        if hasattr(result, 'return_values'):
+            # AgentFinish object from LangChain
+            return_values = result.return_values
+            if isinstance(return_values, dict):
+                # Try to get output from common keys
+                return str(return_values.get('output', return_values.get('result', str(return_values))))
+            else:
+                return str(return_values)
+        elif hasattr(result, 'raw'):
             # CrewAI 0.5.0+ uses .raw attribute
             return str(result.raw)
         elif hasattr(result, 'result'):
@@ -159,7 +303,9 @@ def run_research_agents(topic: str, mode: str = "full"):
             return str(result)
     
     except Exception as e:
-        return f"Error running agents: {str(e)}"
+        import traceback
+        error_details = traceback.format_exc()
+        return f"Error running agents: {str(e)}\n\nDetails:\n{error_details}"
 
 
 def quick_search(query: str, search_type: str):
@@ -203,45 +349,59 @@ def quick_search(query: str, search_type: str):
     return "Search tool not available"
 
 
+def extract_final_answer(text: str) -> str:
+    """
+    Extract the Final Answer from agent output, removing the thinking process.
+    
+    Args:
+        text: Raw agent output with thoughts, actions, and final answer
+        
+    Returns:
+        Clean final answer text, or original text if no final answer found
+    """
+    import re
+    
+    # Try to find "Final Answer:" and extract everything after it
+    final_answer_match = re.search(r'Final Answer:\s*(.*)', text, re.DOTALL | re.IGNORECASE)
+    if final_answer_match:
+        return final_answer_match.group(1).strip()
+    
+    # If no "Final Answer:" found, return original
+    return text
+
+
 # ============================================================================
 # SIDEBAR
 # ============================================================================
 
 with st.sidebar:
     # Logo with Icon
-    st.markdown("""
-    <div style='text-align: center; padding: 1.5rem 0 2rem 0; border-bottom: 2px solid #1E88E5;'>
-        <!-- Logo Icon (Circuit/Brain design) -->
-        <svg width="80" height="80" viewBox="0 0 80 80" style="margin-bottom: 0.5rem;">
-            <!-- Outer circle -->
-            <circle cx="40" cy="40" r="35" fill="none" stroke="#1E88E5" stroke-width="3"/>
-            
-            <!-- Letter Z stylized as circuit -->
-            <path d="M 25 28 L 55 28 L 25 52 L 55 52" 
-                  stroke="#1E88E5" stroke-width="4" stroke-linecap="round" 
-                  fill="none"/>
-            
-            <!-- Connection nodes -->
-            <circle cx="25" cy="28" r="3" fill="#1E88E5"/>
-            <circle cx="55" cy="28" r="3" fill="#1E88E5"/>
-            <circle cx="25" cy="52" r="3" fill="#1E88E5"/>
-            <circle cx="55" cy="52" r="3" fill="#1E88E5"/>
-            
-            <!-- Circuit lines (decorative) -->
-            <circle cx="40" cy="40" r="4" fill="#1E88E5" opacity="0.6"/>
-            <line x1="20" y1="40" x2="28" y2="40" stroke="#1E88E5" stroke-width="2" opacity="0.4"/>
-            <line x1="52" y1="40" x2="60" y2="40" stroke="#1E88E5" stroke-width="2" opacity="0.4"/>
-        </svg>
-        
-        <!-- Logo Text -->
-        <div style='font-size: 2.5rem; font-weight: 800; color: #1E88E5; letter-spacing: 0.15em; margin-top: 0.5rem;'>
-            ZAKEY
+    st.markdown(
+        """
+        <div style='text-align: center; padding: 1.5rem 0 2rem 0; border-bottom: 2px solid #1E88E5;'>
+            <svg width="80" height="80" viewBox="0 0 80 80" style="margin-bottom: 0.5rem;">
+                <circle cx="40" cy="40" r="35" fill="none" stroke="#1E88E5" stroke-width="3"/>
+                <path d="M 25 28 L 55 28 L 25 52 L 55 52" 
+                      stroke="#1E88E5" stroke-width="4" stroke-linecap="round" 
+                      fill="none"/>
+                <circle cx="25" cy="28" r="3" fill="#1E88E5"/>
+                <circle cx="55" cy="28" r="3" fill="#1E88E5"/>
+                <circle cx="25" cy="52" r="3" fill="#1E88E5"/>
+                <circle cx="55" cy="52" r="3" fill="#1E88E5"/>
+                <circle cx="40" cy="40" r="4" fill="#1E88E5" opacity="0.6"/>
+                <line x1="20" y1="40" x2="28" y2="40" stroke="#1E88E5" stroke-width="2" opacity="0.4"/>
+                <line x1="52" y1="40" x2="60" y2="40" stroke="#1E88E5" stroke-width="2" opacity="0.4"/>
+            </svg>
+            <div style='font-size: 2.5rem; font-weight: 800; color: #1E88E5; letter-spacing: 0.15em; margin-top: 0.5rem;'>
+                ZAKEY
+            </div>
+            <div style='font-size: 0.85rem; color: #666; margin-top: 0.3rem; font-weight: 500; letter-spacing: 0.05em;'>
+                AI RESEARCH ASSISTANT
+            </div>
         </div>
-        <div style='font-size: 0.85rem; color: #666; margin-top: 0.3rem; font-weight: 500; letter-spacing: 0.05em;'>
-            AI RESEARCH ASSISTANT
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True
+    )
     
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -265,7 +425,7 @@ with st.sidebar:
             help="Quick: Research agent only\nFull: All 3 agents (research, analysis, writing)"
         )
         
-        save_report = st.checkbox("Save Report", value=True, help="Save results to file")
+       
         search_type = None  # Not used in agent mode
     else:
         st.markdown("### Search Settings")
@@ -422,9 +582,15 @@ if submit_button and user_input:
         with st.spinner("Research Agent gathering information..."):
             progress_bar.progress(33, text="Research Agent gathering information...")
             
-            # Run agents
+            # Run agents with streaming enabled
             mode = "quick" if research_depth == "Quick" else "full"
-            result = run_research_agents(user_input, mode=mode)
+            
+            # Show streaming output in real-time
+            st.markdown("#### Live Agent Thinking (Streaming)")
+            streaming_expander = st.expander("View live agent process (raw output)", expanded=False)
+            with streaming_expander:
+                streaming_placeholder = st.empty()
+                result = run_research_agents(user_input, mode=mode, stream_container=streaming_placeholder)
             
             if research_depth == "Full":
                 progress_bar.progress(66, text="Analyst Agent processing data...")
@@ -434,53 +600,33 @@ if submit_button and user_input:
         
         progress_bar.empty()
         
-        # Display results
-        st.markdown('<div class="success-box">Research Complete!</div>', unsafe_allow_html=True)
+        # Extract clean final answer for main display
+        clean_result = extract_final_answer(result)
         
-        st.markdown("### Research Results")
-        
-        # Create tabs for different views
-        tab1, tab2, tab3 = st.tabs(["Report", "Raw Output", "Save Options"])
-        
-        with tab1:
-            st.markdown('<div class="result-box">', unsafe_allow_html=True)
-            st.markdown(result)
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        with tab2:
-            st.text_area("Raw Output", result, height=300)
-            if st.button("Copy to Clipboard"):
-                st.code(result)
-        
-        with tab3:
-            if save_report and tools['writer']:
-                try:
-                    import re
-                    filename = re.sub(r'[^a-zA-Z0-9\s]', '', user_input)[:30]
-                    filename = filename.strip().replace(' ', '_').lower()
-                    
-                    save_result = tools['writer'].write_markdown(
-                        content=result,
-                        filename=filename,
-                        title=f"Research: {user_input}"
-                    )
-                    
-                    if save_result['success']:
-                        st.success(f"Saved to: {save_result['file_path']}")
-                        
-                        # Download button
-                        st.download_button(
-                            label="Download Report",
-                            data=result,
-                            file_name=f"{filename}.md",
-                            mime="text/markdown"
-                        )
-                except Exception as e:
-                    st.error(f"Save failed: {e}")
-            else:
-                st.info("Enable 'Save Report' in settings to save results")
-        
-        st.session_state.current_result = result
+        # Only display results if we have content
+        if clean_result and clean_result.strip():
+            # Display results
+            st.markdown('<div class="success-box">Research Complete!</div>', unsafe_allow_html=True)
+            
+            st.markdown("### Research Results")
+            
+            # Create tabs for different views
+            tab1, tab2= st.tabs(["Report", "Raw Output",])
+            
+            with tab1:
+                st.markdown('<div class="result-box">', unsafe_allow_html=True)
+                st.markdown(clean_result)
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            with tab2:
+                st.text_area("Raw Output", result, height=300)
+                if st.button("Copy to Clipboard"):
+                    st.code(result)
+            
+          
+            st.session_state.current_result = clean_result
+        else:
+            st.error("No results were generated. Please try again.")
     
     else:
         # Quick Search Mode
@@ -491,20 +637,15 @@ if submit_button and user_input:
                 result = quick_search(user_input, search_type)
             
             st.markdown('<div class="info-box">Search Complete!</div>', unsafe_allow_html=True)
-            st.markdown('<div class="result-box">', unsafe_allow_html=True)
-            st.markdown(result)
-            st.markdown('</div>', unsafe_allow_html=True)
             
-            # Download option
-            if st.button("Download Results"):
-                st.download_button(
-                    label="Download as Text",
-                    data=result,
-                    file_name=f"search_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                    mime="text/plain"
-                )
-            
-            st.session_state.current_result = result
+            # Display results only if we have content
+            if result and result.strip():
+                st.markdown('<div class="result-box">', unsafe_allow_html=True)
+                st.markdown(result)
+                st.markdown('</div>', unsafe_allow_html=True)
+                st.session_state.current_result = result
+            else:
+                st.warning("No results found. Please try a different query.")
         else:
             st.error("Search type not selected. Please select a search type in the sidebar.")
 

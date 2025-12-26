@@ -293,8 +293,10 @@ class SummaryTool:
         try:
             if self.use_llm:
                 summary = self._llm_summary(text, max_sentences, style)
+                logger.info(f"LLM summary: {summary}")
             else:
                 summary = self._extractive_summary(text, max_sentences)
+                logger.info(f"Extractive summary: {summary}")
             
             return {
                 'success': True,
@@ -320,7 +322,8 @@ class SummaryTool:
         style: str
     ) -> str:
         """Create summary using LLM"""
-        
+
+        logger.info(f"Entering LLM summary")
         style_prompts = {
             "concise": "Create a brief, concise summary",
             "detailed": "Create a detailed, comprehensive summary",
@@ -331,7 +334,7 @@ class SummaryTool:
         
         try:
             response = self.llm_client.invoke(prompt)
-            
+            logger.info(f"LLM response: {response.content.strip()}")
             return response.content.strip()
             
         except Exception as e:
@@ -342,6 +345,7 @@ class SummaryTool:
     def _extractive_summary(self, text: str, max_sentences: int) -> str:
         """Create summary by extracting key sentences"""
         
+        logger.info(f"Entering extractive summary")
         # Split into sentences
         sentences = [s.strip() for s in text.replace('\n', ' ').split('.') if s.strip()]
         

@@ -22,6 +22,10 @@ from crewai import Agent, Task, Crew, Process
 # Import LangChain components
 from langchain.tools import tool
 from langchain_openai import ChatOpenAI
+from langchain.callbacks.base import BaseCallbackHandler
+from typing import Any
+import queue
+import threading
 
 # Import tools
 from tools.search_tool import TavilySearchTool
@@ -29,20 +33,70 @@ from tools.rag_tool import RAGTool
 from tools.custom_tools import FileWriterTool, SummaryTool, DataParserTool
 
 
+class StreamingCallbackHandler(BaseCallbackHandler):
+    """
+    Custom callback handler for streaming LLM tokens.
+    Collects tokens in a queue that can be consumed by Streamlit or other interfaces.
+    """
+    
+    def __init__(self):
+        self.token_queue = queue.Queue()
+        self.tokens = []
+        self.is_streaming = True
+    
+    def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any) -> None:
+        """Called when LLM starts generating"""
+        pass
+    
+    def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+        """Called when LLM generates a new token"""
+        if self.is_streaming:
+            self.tokens.append(token)
+            self.token_queue.put(token)
+    
+    def on_llm_end(self, response: Any, **kwargs: Any) -> None:
+        """Called when LLM finishes generating"""
+        self.token_queue.put(None)  # Signal end of stream
+    
+    def on_llm_error(self, error: Exception, **kwargs: Any) -> None:
+        """Called when LLM encounters an error"""
+        self.token_queue.put(None)  # Signal end of stream
+    
+    def get_tokens(self):
+        """Get all collected tokens"""
+        return ''.join(self.tokens)
+    
+    def reset(self):
+        """Reset the handler for new generation"""
+        self.tokens = []
+        self.is_streaming = True
+        # Clear the queue
+        while not self.token_queue.empty():
+            try:
+                self.token_queue.get_nowait()
+            except queue.Empty:
+                break
+
+
 class AgentTeam:
     """
     Manages the AI agent team and their configurations.
     """
     
-    def __init__(self, config_path: str = "agents/agent_config.yaml"):
+    def __init__(self, config_path: str = "agents/agent_config.yaml", enable_streaming: bool = False):
         """
         Initialize the agent team.
         
         Args:
             config_path: Path to agent configuration YAML file
+            enable_streaming: Enable token-level streaming for real-time output
         """
         self.config_path = config_path
         self.config = self._load_config()
+        self.enable_streaming = enable_streaming
+        
+        # Initialize streaming callback if enabled
+        self.streaming_handler = StreamingCallbackHandler() if enable_streaming else None
         
         # Initialize LLM with reduced token limit
         self._init_llm()
@@ -53,7 +107,8 @@ class AgentTeam:
         # Initialize agents
         self.agents = self._create_agents()
         
-        print(f"✅ Agent team initialized with {len(self.agents)} agents")
+        streaming_status = "enabled" if enable_streaming else "disabled"
+        print(f"✅ Agent team initialized with {len(self.agents)} agents (streaming: {streaming_status})")
     
     def _load_config(self) -> Dict:
         """Load agent configuration from YAML file"""
@@ -71,11 +126,16 @@ class AgentTeam:
         """Initialize LLM with reduced token limits to stay within credits"""
         
         # Get API configuration
-        api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
-        model_name = os.getenv("MODEL", "google/gemini-2.0-flash-exp:free")
+        api_key = os.getenv("CREW_KEY") or os.getenv("OPENAI_API_KEY")
+        model_name = os.getenv("CREW_MODEL", "google/gemini-2.0-flash-exp:free")
         
         if not api_key:
             raise ValueError("OPENROUTER_API_KEY or OPENAI_API_KEY required in .env")
+        
+        # Configure callbacks
+        callbacks = []
+        if self.streaming_handler:
+            callbacks.append(self.streaming_handler)
         
         # Configure LLM with reduced max_tokens to fit credit limits
         # 478 credits remaining, so use max 400 tokens per response
@@ -85,10 +145,13 @@ class AgentTeam:
             model=model_name,
             max_tokens=400,  # Reduced from default 4096 to fit within 478 credits
             temperature=0.7,
-            timeout=60
+            timeout=60,
+            streaming=self.enable_streaming,  # Enable streaming if requested
+            callbacks=callbacks if callbacks else None
         )
         
-        print(f"✓ LLM configured: {model_name} (max_tokens=400)")
+        streaming_status = "with streaming" if self.enable_streaming else "without streaming"
+        print(f"✓ LLM configured: {model_name} (max_tokens=400, {streaming_status})")
     
     def _init_tools(self):
         """Initialize all tools that agents will use"""
@@ -99,7 +162,7 @@ class AgentTeam:
         
         # Processing tools
         self.writer = FileWriterTool(output_dir="./output/agent_results")
-        self.summarizer = SummaryTool(use_llm=True)  # Use extractive by default
+        self.summarizer = SummaryTool(use_llm=True) 
         self.parser = DataParserTool()
         
         print(" Tools initialized")
@@ -229,7 +292,15 @@ class AgentTeam:
         
         @tool
         def save_markdown_report(content: str) -> str:
-            """Save content as a markdown report and return the content. Input should be the markdown content to save."""
+            """
+            Save markdown content as a report file and return the FULL report content.
+            
+            Input: The complete markdown content to save (including headers, sections, etc.)
+            Output: Returns the FULL markdown report content that was saved.
+            
+            IMPORTANT: This tool returns the complete report text, not just a confirmation message.
+            Use this tool's output as your final answer to display the full report.
+            """
             try:
                 # Generate filename from first line or use default
                 import re
@@ -246,13 +317,13 @@ class AgentTeam:
                 
                 if result['success']:
                     # Return the full content with save confirmation at top
-                    return f"[Report saved to: {result['file_path']}]\n\n{content}"
+                    return f"✅ Report saved to: {result['file_path']}\n\n{content}"
                 else:
                     # Even if save failed, return the content
-                    return f"[Warning: Save failed - {result.get('error', 'Unknown')}]\n\n{content}"
+                    return f"⚠️ Warning: Save failed - {result.get('error', 'Unknown')}\n\n{content}"
             except Exception as e:
                 # Return content even on error
-                return f"[Error saving: {str(e)}]\n\n{content}"
+                return f"⚠️ Error saving: {str(e)}\n\n{content}"
         
         @tool
         def save_json_data(content: str) -> str:
@@ -315,7 +386,7 @@ class AgentTeam:
             )
             
             agents[agent_id] = agent
-            print(f"  ✓ Created {agent_id}: {agent_config['role']}")
+            print(f"  Created {agent_id}: {agent_config['role']}")
         
         return agents
     
@@ -386,18 +457,19 @@ class AgentTeam:
 
 
 # Convenience function to create a basic research crew
-def create_research_crew(topic: str) -> Crew:
+def create_research_crew(topic: str, enable_streaming: bool = False) -> Crew:
     """
     Create a basic research crew for a given topic.
     
     Args:
         topic: The topic to research
+        enable_streaming: Enable token-level streaming for real-time output
         
     Returns:
         Configured Crew ready to run
     """
     
-    team = AgentTeam()
+    team = AgentTeam(enable_streaming=enable_streaming)
     
     # Create tasks
     research_task = team.create_task(
@@ -415,8 +487,8 @@ def create_research_crew(topic: str) -> Crew:
     
     writing_task = team.create_task(
         agent_id='writer_agent',
-        description=f"Create a comprehensive, well-structured markdown report about {topic} based on the research and analysis. Include an introduction, key findings, detailed sections, and a conclusion. After creating the report, save it AND return the full report content as your final answer.",
-        expected_output="Complete markdown report with introduction, key findings, detailed sections, and conclusion",
+        description=f"Create a comprehensive, well-structured markdown report about {topic} based on the research and analysis. Include an introduction, key findings, detailed sections, and a conclusion. IMPORTANT: Use the save_markdown_report tool to save your report, which will automatically return the full report content. Your final answer MUST be the complete markdown report text returned by the save_markdown_report tool.",
+        expected_output="The complete full-text markdown report (not a summary, but the actual entire report content)",
         context=[research_task, analysis_task]
     )
     
@@ -426,5 +498,8 @@ def create_research_crew(topic: str) -> Crew:
         process="sequential",
         verbose=2
     )
+    
+    # Store reference to streaming handler for external access
+    crew._streaming_handler = team.streaming_handler
     
     return crew

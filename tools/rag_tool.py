@@ -390,8 +390,8 @@ class RAGTool:
             import os
             
             # Get API configuration
-            api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
-            model_name = os.getenv("MODEL", "google/gemini-2.0-flash-exp:free")
+            api_key = os.getenv("RAG_OPENAI_KEY") or os.getenv("OPENAI_API_KEY")
+            model_name = os.getenv("RAG_MODEL", "google/gemini-2.0-flash-exp:free")
             
             if not api_key:
                 # Return raw context if no API key
@@ -422,19 +422,19 @@ class RAGTool:
             # Create synthesis prompt
             prompt = f"""Based on the following documents from the knowledge base, provide a comprehensive and accurate answer to the user's question.
 
-User Question: {query}
+                User Question: {query}
 
-Retrieved Documents:
-{context}
+                Retrieved Documents:
+                {context}
 
-Instructions:
-1. Answer the question directly and clearly
-2. Use information ONLY from the provided documents
-3. Cite sources when referencing specific information (e.g., "According to [Source]...")
-4. If the documents don't fully answer the question, say so
-5. Keep the response well-structured and professional
+                Instructions:
+                1. Answer the question directly and clearly
+                2. Use information ONLY from the provided documents
+                3. Cite sources when referencing specific information (e.g., "According to [Source]...")
+                4. If the documents don't fully answer the question, say so
+                5. Keep the response well-structured and professional
 
-Answer:"""
+                Answer:"""
             
             # Get LLM response
             response = llm.invoke(prompt)
@@ -498,62 +498,4 @@ def search_documents(query: str, rag_tool: RAGTool = None) -> str:
         rag_tool = RAGTool()
     
     return rag_tool.get_context(query)
-
-
-# Example usage
-if __name__ == "__main__":
-    print("Testing RAG Tool\n")
-    
-    # Initialize RAG
-    rag = RAGTool(collection_name="test_kb")
-    
-    # Example 1: Add sample documents
-    print("Test 1: Adding sample documents")
-    print("-" * 50)
-    
-    sample_docs = [
-        "CrewAI is a framework for orchestrating role-playing autonomous AI agents. It enables agents to work together to accomplish complex tasks.",
-        "LangChain is a framework for developing applications powered by language models. It provides tools for prompt management, chains, and agents.",
-        "Tavily is a search API optimized for LLMs and RAG systems. It provides fast, reliable web search results.",
-        "Vector databases store embeddings and enable semantic search. ChromaDB is a popular open-source vector database.",
-    ]
-    
-    metadatas = [
-        {"source": "crewai_docs", "topic": "frameworks"},
-        {"source": "langchain_docs", "topic": "frameworks"},
-        {"source": "tavily_docs", "topic": "search"},
-        {"source": "vector_db_docs", "topic": "databases"},
-    ]
-    
-    added = rag.add_documents(sample_docs, metadatas)
-    print(f"Added {added} documents\n")
-    
-    # Example 2: Search
-    print("Test 2: Searching knowledge base")
-    print("-" * 50)
-    
-    query = "What is CrewAI?"
-    result = rag.search(query, n_results=2)
-    
-    if result['success']:
-        print(f"Query: {result['query']}")
-        print(f"Found {result['total_results']} results:\n")
-        
-        for i, item in enumerate(result['results'], 1):
-            print(f"{i}. Relevance: {item['relevance']}")
-            print(f"   Source: {item['metadata'].get('source', 'Unknown')}")
-            print(f"   Content: {item['content'][:100]}...\n")
-    
-    # Example 3: Get context for LLM
-    print("Test 3: Get context string")
-    print("-" * 50)
-    
-    context = rag.get_context("vector databases", n_results=2)
-    print(f"Context:\n{context[:200]}...\n")
-    
-    # Stats
-    print("=" * 50)
-    stats = rag.get_collection_stats()
-    print(f"Collection stats: {stats}")
-    print("\nAll tests completed!")
 

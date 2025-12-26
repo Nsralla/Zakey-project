@@ -46,7 +46,7 @@ app.add_middleware(
 tavily = TavilySearchTool() if os.getenv("TAVILY_API_KEY") else None
 rag = RAGTool(collection_name="ai_assistant_kb")
 writer = FileWriterTool(output_dir="./output/mcp_results")
-summarizer = SummaryTool(use_llm=False)
+summarizer = SummaryTool(use_llm=True)
 
 # Store for running tasks
 task_results = {}
